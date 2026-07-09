@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>囲碁 対人戦</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f3f0e7;
+        --panel: #fffaf0;
+        --ink: #211d18;
+        --muted: #675f54;
+        --line: #3a2b18;
+        --wood: #d9a441;
+        --accent: #1d6f5f;
+        --danger: #9d2c2c;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+      }
+
+      button, select { font: inherit; }
+
+      .app-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 20px;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .game-area, .side-panel {
+        background: var(--panel);
+        border: 1px solid rgba(33, 29, 24, 0.16);
+        border-radius: 8px;
+        box-shadow: 0 12px 30px rgba(56, 43, 25, 0.12);
+      }
+
+      .game-area {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        padding: 18px;
+      }
+
+      .top-bar {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      h1 {
+        margin: 0 0 4px;
+        font-size: 28px;
+        letter-spacing: 0;
+      }
+
+      p { margin: 0; }
+
+      .size-picker {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        white-space: nowrap;
+      }
+
+      select {
+        min-width: 120px;
+        padding: 8px 10px;
+        border: 1px solid rgba(33, 29, 24, 0.22);
+        border-radius: 6px;
+        background: white;
+        color: var(--ink);
+      }
+
+      .board-wrap {
+        display: grid;
+        place-items: center;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .board {
+        --size: 19;
+        display: grid;
+        grid-template-columns: repeat(var(--size), minmax(0, 1fr));
+        width: min(78vmin, 100%);
+        aspect-ratio: 1;
+        padding: 18px;
+        border: 3px solid var(--line);
+        border-radius: 6px;
+        background-color: var(--wood);
+        box-shadow: inset 0 0 24px rgba(83, 50, 12, 0.28);
+      }
+
+      .point {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 100%;
+        aspect-ratio: 1;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .point::before, .point::after {
+        content: "";
+        position: absolute;
+        z-index: 0;
+        background: rgba(58, 43, 24, 0.82);
+        pointer-events: none;
+      }
+
+      .point::before {
+        width: 100%;
+        height: 1px;
+      }
+
+      .point::after {
+        width: 1px;
+        height: 100%;
+      }
+
+      .point:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: -3px;
+      }
+
+      .stone {
+        position: relative;
+        z-index: 1;
+        width: 78%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+      }
+
+      .stone.black {
+        background: radial-gradient(circle at 35% 28%, #545454, #050505 72%);
+      }
+
+      .stone.white {
+        background: radial-gradient(circle at 35% 28%, #ffffff, #d8d8d8 76%);
+        border: 1px solid rgba(0, 0, 0, 0.18);
+      }
+
+      .side-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        padding: 18px;
+      }
+
+      .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .info-grid > div, .message-box {
+        padding: 12px;
+        border: 1px solid rgba(33, 29, 24, 0.12);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.55);
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      strong { font-size: 24px; }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .actions button {
+        min-height: 42px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+      }
+
+      .actions button:nth-child(2) { background: var(--danger); }
+      .actions button:nth-child(4) { background: var(--muted); }
+
+      .actions button:disabled, .point:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .message-box {
+        margin-top: auto;
+        min-height: 100px;
+      }
+
+      @media (max-width: 880px) {
+        .app-shell {
+          grid-template-columns: 1fr;
+          padding: 12px;
+        }
+
+        .top-bar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .board {
+          width: min(94vw, 680px);
+          padding: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="game-area" aria-label="囲碁盤">
+        <header class="top-bar">
+          <div>
+            <h1>囲碁 対人戦</h1>
+            <p id="statusText">黒番です。</p>
+          </div>
+          <label class="size-picker">
+            盤面
+            <select id="boardSize">
+              <option value="9">9路盤</option>
+              <option value="13">13路盤</option>
+              <option value="19" selected>19路盤</option>
+            </select>
+          </label>
+        </header>
+
+        <div class="board-wrap">
+          <div id="board" class="board" aria-label="碁盤"></div>
+        </div>
+      </section>
+
+      <aside class="side-panel" aria-label="対局情報">
+        <div class="info-grid">
+          <div>
+            <span class="label">手番</span>
+            <strong id="turnLabel">黒</strong>
+          </div>
+          <div>
+            <span class="label">手数</span>
+            <strong id="moveNumber">0</strong>
+          </div>
+          <div>
+            <span class="label">黒のアゲハマ</span>
+            <strong id="blackCaptures">0</strong>
+          </div>
+          <div>
+            <span class="label">白のアゲハマ</span>
+            <strong id="whiteCaptures">0</strong>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="passButton" type="button">パス</button>
+          <button id="resignButton" type="button">投了</button>
+          <button id="finishButton" type="button">終局</button>
+          <button id="resetButton" type="button">リセット</button>
+        </div>
+
+        <div class="message-box">
+          <span class="label">メッセージ</span>
+          <p id="messageText">黒番です。交点をクリックして着手します。</p>
+        </div>
+      </aside>
+    </main>
+
+    <script>
+      const PLAYERS = ['black', 'white'];
+
+      class GoGame {
+        constructor(size = 19) {
+          if (![9, 13, 19].includes(size)) throw new Error('Unsupported board size');
+          this.size = size;
+          this.board = createBoard(size);
+          this.currentPlayer = 'black';
+          this.captures = { black: 0, white: 0 };
+          this.moveNumber = 0;
+          this.finished = false;
+          this.result = '';
+          this.lastMessage = 'Black to play.';
+          this.previousBoardHash = null;
+          this.passCount = 0;
+        }
+
+        play(row, col) {
+          if (this.finished) return { ok: false, reason: 'finished' };
+          if (!this.isOnBoard(row, col)) return { ok: false, reason: 'off-board' };
+          if (this.board[row][col] !== null) return { ok: false, reason: 'occupied' };
+
+          const before = cloneBoard(this.board);
+          const beforeHash = boardHash(before);
+          const player = this.currentPlayer;
+          const opponent = otherPlayer(player);
+          this.board[row][col] = player;
+
+          let captured = 0;
+          for (const [nextRow, nextCol] of this.neighbors(row, col)) {
+            if (this.board[nextRow][nextCol] !== opponent) continue;
+            const group = this.collectGroup(nextRow, nextCol);
+            if (group.liberties.size === 0) {
+              captured += group.stones.length;
+              for (const [stoneRow, stoneCol] of group.stones) {
+                this.board[stoneRow][stoneCol] = null;
+              }
+            }
+          }
+
+          const ownGroup = this.collectGroup(row, col);
+          if (ownGroup.liberties.size === 0) {
+            this.board = before;
+            return { ok: false, reason: 'suicide' };
+          }
+
+          if (boardHash(this.board) === this.previousBoardHash) {
+            this.board = before;
+            return { ok: false, reason: 'ko' };
+          }
+
+          this.captures[player] += captured;
+          this.previousBoardHash = beforeHash;
+          this.passCount = 0;
+          this.moveNumber += 1;
+          this.currentPlayer = opponent;
+          this.lastMessage = `${labelPlayer(player)} played ${row + 1}-${col + 1}.`;
+          return { ok: true, captured };
+        }
+
+        pass() {
+          if (this.finished) return { ok: false, reason: 'finished' };
+          const player = this.currentPlayer;
+          this.previousBoardHash = boardHash(this.board);
+          this.passCount += 1;
+          this.moveNumber += 1;
+          this.currentPlayer = otherPlayer(player);
+          if (this.passCount >= 2) {
+            this.finished = true;
+            this.result = 'Both players passed. Count territory manually.';
+            this.lastMessage = this.result;
+          } else {
+            this.lastMessage = `${labelPlayer(player)} passed.`;
+          }
+          return { ok: true };
+        }
+
+        resign() {
+          if (this.finished) return { ok: false, reason: 'finished' };
+          const winner = otherPlayer(this.currentPlayer);
+          this.finished = true;
+          this.result = `${labelPlayer(winner)} wins by resignation.`;
+          this.lastMessage = this.result;
+          return { ok: true };
+        }
+
+        finishManually() {
+          if (this.finished) return { ok: false, reason: 'finished' };
+          this.finished = true;
+          this.result = 'Game ended. Count territory manually.';
+          this.lastMessage = this.result;
+          return { ok: true };
+        }
+
+        isOnBoard(row, col) {
+          return row >= 0 && row < this.size && col >= 0 && col < this.size;
+        }
+
+        neighbors(row, col) {
+          return [[row - 1, col], [row + 1, col], [row, col - 1], [row, col + 1]]
+            .filter(([nextRow, nextCol]) => this.isOnBoard(nextRow, nextCol));
+        }
+
+        collectGroup(row, col) {
+          const color = this.board[row][col];
+          const stack = [[row, col]];
+          const seen = new Set();
+          const liberties = new Set();
+          const stones = [];
+
+          while (stack.length > 0) {
+            const [stoneRow, stoneCol] = stack.pop();
+            const key = pointKey(stoneRow, stoneCol);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            stones.push([stoneRow, stoneCol]);
+
+            for (const [nextRow, nextCol] of this.neighbors(stoneRow, stoneCol)) {
+              const point = this.board[nextRow][nextCol];
+              if (point === null) liberties.add(pointKey(nextRow, nextCol));
+              else if (point === color) stack.push([nextRow, nextCol]);
+            }
+          }
+
+          return { stones, liberties };
+        }
+      }
+
+      const boardElement = document.querySelector('#board');
+      const boardSizeElement = document.querySelector('#boardSize');
+      const statusText = document.querySelector('#statusText');
+      const turnLabel = document.querySelector('#turnLabel');
+      const moveNumber = document.querySelector('#moveNumber');
+      const blackCaptures = document.querySelector('#blackCaptures');
+      const whiteCaptures = document.querySelector('#whiteCaptures');
+      const messageText = document.querySelector('#messageText');
+      const passButton = document.querySelector('#passButton');
+      const resignButton = document.querySelector('#resignButton');
+      const finishButton = document.querySelector('#finishButton');
+      const resetButton = document.querySelector('#resetButton');
+      let game = new GoGame(Number(boardSizeElement.value));
+
+      boardSizeElement.addEventListener('change', () => {
+        game = new GoGame(Number(boardSizeElement.value));
+        render();
+      });
+
+      passButton.addEventListener('click', () => {
+        game.pass();
+        render();
+      });
+
+      resignButton.addEventListener('click', () => {
+        game.resign();
+        render();
+      });
+
+      finishButton.addEventListener('click', () => {
+        game.finishManually();
+        render();
+      });
+
+      resetButton.addEventListener('click', () => {
+        game = new GoGame(Number(boardSizeElement.value));
+        render();
+      });
+
+      function render() {
+        boardElement.style.setProperty('--size', game.size);
+        boardElement.replaceChildren();
+
+        for (let row = 0; row < game.size; row += 1) {
+          for (let col = 0; col < game.size; col += 1) {
+            const point = document.createElement('button');
+            point.type = 'button';
+            point.className = 'point';
+            point.disabled = game.finished;
+            point.setAttribute('aria-label', `${row + 1}行 ${col + 1}列`);
+            point.addEventListener('click', () => handlePointClick(row, col));
+
+            const stone = game.board[row][col];
+            if (stone) {
+              const stoneElement = document.createElement('span');
+              stoneElement.className = `stone ${stone}`;
+              stoneElement.setAttribute('aria-label', stone === 'black' ? '黒石' : '白石');
+              point.append(stoneElement);
+            }
+            boardElement.append(point);
+          }
+        }
+
+        const turn = game.currentPlayer === 'black' ? '黒' : '白';
+        statusText.textContent = game.finished ? game.result : `${turn}番です。`;
+        turnLabel.textContent = game.finished ? '-' : turn;
+        moveNumber.textContent = String(game.moveNumber);
+        blackCaptures.textContent = String(game.captures.black);
+        whiteCaptures.textContent = String(game.captures.white);
+        messageText.textContent = toJapaneseMessage(game.lastMessage);
+        passButton.disabled = game.finished;
+        resignButton.disabled = game.finished;
+        finishButton.disabled = game.finished;
+      }
+
+      function handlePointClick(row, col) {
+        const result = game.play(row, col);
+        if (!result.ok) game.lastMessage = reasonToMessage(result.reason);
+        render();
+      }
+
+      function createBoard(size) {
+        return Array.from({ length: size }, () => Array.from({ length: size }, () => null));
+      }
+
+      function cloneBoard(board) {
+        return board.map((row) => [...row]);
+      }
+
+      function boardHash(board) {
+        return board.map((row) => row.map((point) => point?.[0] ?? '.').join('')).join('/');
+      }
+
+      function pointKey(row, col) {
+        return `${row},${col}`;
+      }
+
+      function otherPlayer(player) {
+        return PLAYERS.find((candidate) => candidate !== player);
+      }
+
+      function labelPlayer(player) {
+        return player === 'black' ? 'Black' : 'White';
+      }
+
+      function reasonToMessage(reason) {
+        const messages = {
+          occupied: 'その交点にはすでに石があります。',
+          suicide: '自殺手は打てません。',
+          ko: 'コウの即時取り返しはできません。',
+          finished: '対局は終了しています。',
+          'off-board': '盤外です。',
+        };
+        return messages[reason] ?? '無効な手です。';
+      }
+
+      function toJapaneseMessage(message) {
+        if (message === 'Black to play.') return '黒番です。交点をクリックして着手します。';
+        if (message === 'Both players passed. Count territory manually.') {
+          return '両者が連続でパスしました。地は手動で数えてください。';
+        }
+        if (message === 'Game ended. Count territory manually.') {
+          return '終局しました。地は手動で数えてください。';
+        }
+        if (message === 'Black wins by resignation.') return '白が投了しました。黒の勝ちです。';
+        if (message === 'White wins by resignation.') return '黒が投了しました。白の勝ちです。';
+        if (message.endsWith(' passed.')) {
+          return `${message.startsWith('Black') ? '黒' : '白'}がパスしました。`;
+        }
+        if (message.includes(' played ')) {
+          const translated = message.startsWith('Black') ? '黒' : '白';
+          const point = message.split(' played ')[1].replace('.', '');
+          return `${translated}が ${point} に着手しました。`;
+        }
+        return message;
+      }
+
+      render();
+    </script>
+  </body>
+</html>
