@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GoGame } from './game-core.mjs';
+import { GoGame, getStarPoints } from './game-core.mjs';
 
 test('creates empty boards for supported sizes', () => {
   for (const size of [9, 13, 19]) {
@@ -76,5 +76,55 @@ test('two consecutive passes end the game', () => {
   assert.equal(game.finished, false);
   assert.equal(game.pass().ok, true);
   assert.equal(game.finished, true);
-  assert.equal(game.result, 'Both players passed. Count territory manually.');
+  assert.match(game.result, /Final estimate:/);
+});
+
+test('returns standard star points for each board size', () => {
+  assert.deepEqual(getStarPoints(9), [[2, 2], [2, 6], [4, 4], [6, 2], [6, 6]]);
+  assert.deepEqual(getStarPoints(13), [[3, 3], [3, 9], [6, 6], [9, 3], [9, 9]]);
+  assert.deepEqual(getStarPoints(19), [
+    [3, 3], [3, 9], [3, 15],
+    [9, 3], [9, 9], [9, 15],
+    [15, 3], [15, 9], [15, 15],
+  ]);
+});
+
+test('starts a handicap game with black stones and white to play', () => {
+  const game = new GoGame(9, { handicap: 4 });
+  assert.equal(game.board[2][2], 'black');
+  assert.equal(game.board[6][6], 'black');
+  assert.equal(game.board[6][2], 'black');
+  assert.equal(game.board[2][6], 'black');
+  assert.equal(game.currentPlayer, 'white');
+  assert.equal(game.moveNumber, 0);
+});
+
+test('estimates Chinese area score with neutral points excluded', () => {
+  const game = new GoGame(9);
+  game.board[0][1] = 'black';
+  game.board[1][0] = 'black';
+  game.board[7][8] = 'white';
+  game.board[8][7] = 'white';
+  game.board[4][3] = 'black';
+  game.board[4][5] = 'white';
+
+  const score = game.estimateScore();
+
+  assert.equal(score.black.stones, 3);
+  assert.equal(score.black.territory, 1);
+  assert.equal(score.white.stones, 3);
+  assert.equal(score.white.territory, 1);
+  assert.equal(score.neutral, 73);
+  assert.equal(score.leader, 'white');
+  assert.equal(score.margin, 6.5);
+});
+
+test('treats large open areas as neutral in rough estimates', () => {
+  const game = new GoGame(19, { handicap: 2 });
+  const score = game.estimateScore();
+
+  assert.equal(score.black.stones, 2);
+  assert.equal(score.black.territory, 0);
+  assert.equal(score.black.total, 2);
+  assert.equal(score.neutral, 359);
 });

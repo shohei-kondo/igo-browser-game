@@ -1,11 +1,32 @@
 const PLAYERS = ['black', 'white'];
+const STAR_POINTS = {
+  9: [[2, 2], [2, 6], [4, 4], [6, 2], [6, 6]],
+  13: [[3, 3], [3, 9], [6, 6], [9, 3], [9, 9]],
+  19: [
+    [3, 3], [3, 9], [3, 15],
+    [9, 3], [9, 9], [9, 15],
+    [15, 3], [15, 9], [15, 15],
+  ],
+};
+
+const HANDICAP_POINTS = {
+  9: [[2, 2], [6, 6], [6, 2], [2, 6], [4, 4]],
+  13: [[3, 3], [9, 9], [9, 3], [3, 9], [6, 6], [3, 6], [9, 6], [6, 3], [6, 9]],
+  19: [[3, 3], [15, 15], [15, 3], [3, 15], [9, 9], [3, 9], [15, 9], [9, 3], [9, 15]],
+};
 
 export class GoGame {
-  constructor(size = 9) {
+  constructor(size = 9, options = {}) {
     if (![9, 13, 19].includes(size)) {
       throw new Error('Unsupported board size');
     }
+    const handicap = Number(options.handicap ?? 0);
+    if (!Number.isInteger(handicap) || handicap < 0 || handicap > HANDICAP_POINTS[size].length) {
+      throw new Error('Unsupported handicap count');
+    }
     this.size = size;
+    this.handicap = handicap;
+    this.komi = handicap > 0 ? 0 : 6.5;
     this.board = createBoard(size);
     this.currentPlayer = 'black';
     this.captures = { black: 0, white: 0 };
@@ -15,6 +36,7 @@ export class GoGame {
     this.lastMessage = 'Black to play.';
     this.previousBoardHash = null;
     this.passCount = 0;
+    this.placeHandicapStones(handicap);
   }
 
   play(row, col) {
@@ -69,7 +91,7 @@ export class GoGame {
     this.currentPlayer = otherPlayer(player);
     if (this.passCount >= 2) {
       this.finished = true;
-      this.result = 'Both players passed. Count territory manually.';
+      this.result = `Both players passed. Final estimate: ${formatScoreSummary(this.estimateScore())}.`;
       this.lastMessage = this.result;
     } else {
       this.lastMessage = `${labelPlayer(player)} passed.`;
@@ -90,9 +112,50 @@ export class GoGame {
   finishManually() {
     if (this.finished) return { ok: false, reason: 'finished' };
     this.finished = true;
-    this.result = 'Game ended. Count territory manually.';
+    this.result = `Game ended. Final estimate: ${formatScoreSummary(this.estimateScore())}.`;
     this.lastMessage = this.result;
     return { ok: true };
+  }
+
+  estimateScore() {
+    const score = {
+      black: { stones: 0, territory: 0, total: 0 },
+      white: { stones: 0, territory: 0, total: 0 },
+      neutral: 0,
+      komi: this.komi,
+      leader: null,
+      margin: 0,
+    };
+    const visited = new Set();
+
+    for (let row = 0; row < this.size; row += 1) {
+      for (let col = 0; col < this.size; col += 1) {
+        const point = this.board[row][col];
+        if (point === 'black' || point === 'white') {
+          score[point].stones += 1;
+          continue;
+        }
+
+        const key = pointKey(row, col);
+        if (visited.has(key)) continue;
+        const region = this.collectEmptyRegion(row, col);
+        for (const regionKey of region.points) visited.add(regionKey);
+
+        if (region.borders.size === 1 && (!region.touchesEdge || region.points.length <= 4)) {
+          const owner = [...region.borders][0];
+          score[owner].territory += region.points.length;
+        } else {
+          score.neutral += region.points.length;
+        }
+      }
+    }
+
+    score.black.total = score.black.stones + score.black.territory;
+    score.white.total = score.white.stones + score.white.territory + score.komi;
+    const diff = score.black.total - score.white.total;
+    score.leader = diff > 0 ? 'black' : diff < 0 ? 'white' : 'tie';
+    score.margin = Math.abs(diff);
+    return score;
   }
 
   isOnBoard(row, col) {
@@ -134,6 +197,56 @@ export class GoGame {
 
     return { stones, liberties };
   }
+
+  collectEmptyRegion(row, col) {
+    const stack = [[row, col]];
+    const seen = new Set();
+    const borders = new Set();
+    const points = [];
+    let touchesEdge = false;
+
+    while (stack.length > 0) {
+      const [emptyRow, emptyCol] = stack.pop();
+      const key = pointKey(emptyRow, emptyCol);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      points.push(key);
+      if (emptyRow === 0 || emptyCol === 0 || emptyRow === this.size - 1 || emptyCol === this.size - 1) {
+        touchesEdge = true;
+      }
+
+      for (const [nextRow, nextCol] of this.neighbors(emptyRow, emptyCol)) {
+        const point = this.board[nextRow][nextCol];
+        if (point === null) {
+          stack.push([nextRow, nextCol]);
+        } else {
+          borders.add(point);
+        }
+      }
+    }
+
+    return { points, borders, touchesEdge };
+  }
+
+  placeHandicapStones(handicap) {
+    for (const [row, col] of HANDICAP_POINTS[this.size].slice(0, handicap)) {
+      this.board[row][col] = 'black';
+    }
+    if (handicap > 0) {
+      this.currentPlayer = 'white';
+      this.lastMessage = `Handicap stones placed. ${labelPlayer(this.currentPlayer)} to play.`;
+    }
+  }
+}
+
+export function getStarPoints(size) {
+  if (!STAR_POINTS[size]) throw new Error('Unsupported board size');
+  return STAR_POINTS[size].map((point) => [...point]);
+}
+
+export function getMaxHandicap(size) {
+  if (!HANDICAP_POINTS[size]) throw new Error('Unsupported board size');
+  return HANDICAP_POINTS[size].length;
 }
 
 export function labelPlayer(player) {
@@ -162,4 +275,9 @@ function pointKey(row, col) {
 
 function formatPoint(row, col) {
   return `${row + 1}-${col + 1}`;
+}
+
+function formatScoreSummary(score) {
+  if (score.leader === 'tie') return 'Tie';
+  return `${labelPlayer(score.leader)} by ${score.margin}`;
 }

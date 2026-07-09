@@ -11,6 +11,10 @@ test('index.html is self-contained for GitHub Pages', async () => {
   assert.match(html, /<style>/i);
   assert.match(html, /<script>/i);
   assert.match(html, /class GoGame/);
+  assert.match(html, /\.hoshi/);
+  assert.match(html, /star\.className = 'hoshi'/);
+  assert.match(html, /id="handicapCount"/);
+  assert.match(html, /id="scoreLead"/);
 
   const script = html.match(/<script>([\s\S]*)<\/script>/i)?.[1];
   assert.ok(script);

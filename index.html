@@ -31,7 +31,7 @@
 
       .app-shell {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 320px;
+        grid-template-columns: minmax(0, 1fr) 360px;
         gap: 20px;
         min-height: 100vh;
         padding: 20px;
@@ -67,7 +67,13 @@
 
       p { margin: 0; }
 
-      .size-picker {
+      .setup-controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .field {
         display: grid;
         gap: 6px;
         color: var(--muted);
@@ -124,24 +130,26 @@
         pointer-events: none;
       }
 
-      .point::before {
-        width: 100%;
-        height: 1px;
-      }
-
-      .point::after {
-        width: 1px;
-        height: 100%;
-      }
+      .point::before { width: 100%; height: 1px; }
+      .point::after { width: 1px; height: 100%; }
 
       .point:focus-visible {
         outline: 3px solid var(--accent);
         outline-offset: -3px;
       }
 
-      .stone {
+      .hoshi {
         position: relative;
         z-index: 1;
+        width: 24%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: rgba(58, 43, 24, 0.88);
+      }
+
+      .stone {
+        position: relative;
+        z-index: 2;
         width: 78%;
         aspect-ratio: 1;
         border-radius: 50%;
@@ -160,17 +168,17 @@
       .side-panel {
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: 16px;
         padding: 18px;
       }
 
-      .info-grid {
+      .info-grid, .score-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 12px;
       }
 
-      .info-grid > div, .message-box {
+      .info-grid > div, .score-grid > div, .message-box {
         padding: 12px;
         border: 1px solid rgba(33, 29, 24, 0.12);
         border-radius: 8px;
@@ -185,6 +193,8 @@
       }
 
       strong { font-size: 24px; }
+
+      .score-grid strong { font-size: 20px; }
 
       .actions {
         display: grid;
@@ -210,11 +220,16 @@
       }
 
       .message-box {
-        margin-top: auto;
-        min-height: 100px;
+        min-height: 92px;
       }
 
-      @media (max-width: 880px) {
+      .note {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 920px) {
         .app-shell {
           grid-template-columns: 1fr;
           padding: 12px;
@@ -223,6 +238,10 @@
         .top-bar {
           align-items: stretch;
           flex-direction: column;
+        }
+
+        .setup-controls {
+          grid-template-columns: 1fr;
         }
 
         .board {
@@ -240,14 +259,20 @@
             <h1>囲碁 対人戦</h1>
             <p id="statusText">黒番です。</p>
           </div>
-          <label class="size-picker">
-            盤面
-            <select id="boardSize">
-              <option value="9">9路盤</option>
-              <option value="13">13路盤</option>
-              <option value="19" selected>19路盤</option>
-            </select>
-          </label>
+          <div class="setup-controls">
+            <label class="field">
+              盤面
+              <select id="boardSize">
+                <option value="9">9路盤</option>
+                <option value="13">13路盤</option>
+                <option value="19" selected>19路盤</option>
+              </select>
+            </label>
+            <label class="field">
+              置き石
+              <select id="handicapCount"></select>
+            </label>
+          </div>
         </header>
 
         <div class="board-wrap">
@@ -275,10 +300,30 @@
           </div>
         </div>
 
+        <div class="score-grid">
+          <div>
+            <span class="label">黒エリア</span>
+            <strong id="blackArea">0</strong>
+          </div>
+          <div>
+            <span class="label">白エリア</span>
+            <strong id="whiteArea">6.5</strong>
+          </div>
+          <div>
+            <span class="label">中立点</span>
+            <strong id="neutralArea">0</strong>
+          </div>
+          <div>
+            <span class="label">ザックリ試算</span>
+            <strong id="scoreLead">白 +6.5</strong>
+          </div>
+        </div>
+        <p class="note">試算は中国式エリア計算です。盤上の石と単色で囲まれた空点を数えます。死石指定はありません。</p>
+
         <div class="actions">
           <button id="passButton" type="button">パス</button>
           <button id="resignButton" type="button">投了</button>
-          <button id="finishButton" type="button">終局</button>
+          <button id="finishButton" type="button">終局計算</button>
           <button id="resetButton" type="button">リセット</button>
         </div>
 
@@ -291,11 +336,31 @@
 
     <script>
       const PLAYERS = ['black', 'white'];
+      const STAR_POINTS = {
+        9: [[2, 2], [2, 6], [4, 4], [6, 2], [6, 6]],
+        13: [[3, 3], [3, 9], [6, 6], [9, 3], [9, 9]],
+        19: [
+          [3, 3], [3, 9], [3, 15],
+          [9, 3], [9, 9], [9, 15],
+          [15, 3], [15, 9], [15, 15],
+        ],
+      };
+      const HANDICAP_POINTS = {
+        9: [[2, 2], [6, 6], [6, 2], [2, 6], [4, 4]],
+        13: [[3, 3], [9, 9], [9, 3], [3, 9], [6, 6], [3, 6], [9, 6], [6, 3], [6, 9]],
+        19: [[3, 3], [15, 15], [15, 3], [3, 15], [9, 9], [3, 9], [15, 9], [9, 3], [9, 15]],
+      };
 
       class GoGame {
-        constructor(size = 19) {
+        constructor(size = 19, options = {}) {
           if (![9, 13, 19].includes(size)) throw new Error('Unsupported board size');
+          const handicap = Number(options.handicap ?? 0);
+          if (!Number.isInteger(handicap) || handicap < 0 || handicap > HANDICAP_POINTS[size].length) {
+            throw new Error('Unsupported handicap count');
+          }
           this.size = size;
+          this.handicap = handicap;
+          this.komi = handicap > 0 ? 0 : 6.5;
           this.board = createBoard(size);
           this.currentPlayer = 'black';
           this.captures = { black: 0, white: 0 };
@@ -305,6 +370,7 @@
           this.lastMessage = 'Black to play.';
           this.previousBoardHash = null;
           this.passCount = 0;
+          this.placeHandicapStones(handicap);
         }
 
         play(row, col) {
@@ -324,9 +390,7 @@
             const group = this.collectGroup(nextRow, nextCol);
             if (group.liberties.size === 0) {
               captured += group.stones.length;
-              for (const [stoneRow, stoneCol] of group.stones) {
-                this.board[stoneRow][stoneCol] = null;
-              }
+              for (const [stoneRow, stoneCol] of group.stones) this.board[stoneRow][stoneCol] = null;
             }
           }
 
@@ -359,7 +423,7 @@
           this.currentPlayer = otherPlayer(player);
           if (this.passCount >= 2) {
             this.finished = true;
-            this.result = 'Both players passed. Count territory manually.';
+            this.result = `Both players passed. Final estimate: ${formatScoreSummary(this.estimateScore())}.`;
             this.lastMessage = this.result;
           } else {
             this.lastMessage = `${labelPlayer(player)} passed.`;
@@ -379,9 +443,46 @@
         finishManually() {
           if (this.finished) return { ok: false, reason: 'finished' };
           this.finished = true;
-          this.result = 'Game ended. Count territory manually.';
+          this.result = `Game ended. Final estimate: ${formatScoreSummary(this.estimateScore())}.`;
           this.lastMessage = this.result;
           return { ok: true };
+        }
+
+        estimateScore() {
+          const score = {
+            black: { stones: 0, territory: 0, total: 0 },
+            white: { stones: 0, territory: 0, total: 0 },
+            neutral: 0,
+            komi: this.komi,
+            leader: null,
+            margin: 0,
+          };
+          const visited = new Set();
+
+          for (let row = 0; row < this.size; row += 1) {
+            for (let col = 0; col < this.size; col += 1) {
+              const point = this.board[row][col];
+              if (point === 'black' || point === 'white') {
+                score[point].stones += 1;
+                continue;
+              }
+              const key = pointKey(row, col);
+              if (visited.has(key)) continue;
+              const region = this.collectEmptyRegion(row, col);
+              for (const regionKey of region.points) visited.add(regionKey);
+              if (region.borders.size === 1 && (!region.touchesEdge || region.points.length <= 4)) {
+                score[[...region.borders][0]].territory += region.points.length;
+              }
+              else score.neutral += region.points.length;
+            }
+          }
+
+          score.black.total = score.black.stones + score.black.territory;
+          score.white.total = score.white.stones + score.white.territory + score.komi;
+          const diff = score.black.total - score.white.total;
+          score.leader = diff > 0 ? 'black' : diff < 0 ? 'white' : 'tie';
+          score.margin = Math.abs(diff);
+          return score;
         }
 
         isOnBoard(row, col) {
@@ -399,65 +500,91 @@
           const seen = new Set();
           const liberties = new Set();
           const stones = [];
-
           while (stack.length > 0) {
             const [stoneRow, stoneCol] = stack.pop();
             const key = pointKey(stoneRow, stoneCol);
             if (seen.has(key)) continue;
             seen.add(key);
             stones.push([stoneRow, stoneCol]);
-
             for (const [nextRow, nextCol] of this.neighbors(stoneRow, stoneCol)) {
               const point = this.board[nextRow][nextCol];
               if (point === null) liberties.add(pointKey(nextRow, nextCol));
               else if (point === color) stack.push([nextRow, nextCol]);
             }
           }
-
           return { stones, liberties };
+        }
+
+        collectEmptyRegion(row, col) {
+          const stack = [[row, col]];
+          const seen = new Set();
+          const borders = new Set();
+          const points = [];
+          let touchesEdge = false;
+          while (stack.length > 0) {
+            const [emptyRow, emptyCol] = stack.pop();
+            const key = pointKey(emptyRow, emptyCol);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            points.push(key);
+            if (emptyRow === 0 || emptyCol === 0 || emptyRow === this.size - 1 || emptyCol === this.size - 1) {
+              touchesEdge = true;
+            }
+            for (const [nextRow, nextCol] of this.neighbors(emptyRow, emptyCol)) {
+              const point = this.board[nextRow][nextCol];
+              if (point === null) stack.push([nextRow, nextCol]);
+              else borders.add(point);
+            }
+          }
+          return { points, borders, touchesEdge };
+        }
+
+        placeHandicapStones(handicap) {
+          for (const [row, col] of HANDICAP_POINTS[this.size].slice(0, handicap)) this.board[row][col] = 'black';
+          if (handicap > 0) {
+            this.currentPlayer = 'white';
+            this.lastMessage = `Handicap stones placed. ${labelPlayer(this.currentPlayer)} to play.`;
+          }
         }
       }
 
       const boardElement = document.querySelector('#board');
       const boardSizeElement = document.querySelector('#boardSize');
+      const handicapElement = document.querySelector('#handicapCount');
       const statusText = document.querySelector('#statusText');
       const turnLabel = document.querySelector('#turnLabel');
       const moveNumber = document.querySelector('#moveNumber');
       const blackCaptures = document.querySelector('#blackCaptures');
       const whiteCaptures = document.querySelector('#whiteCaptures');
+      const blackArea = document.querySelector('#blackArea');
+      const whiteArea = document.querySelector('#whiteArea');
+      const neutralArea = document.querySelector('#neutralArea');
+      const scoreLead = document.querySelector('#scoreLead');
       const messageText = document.querySelector('#messageText');
       const passButton = document.querySelector('#passButton');
       const resignButton = document.querySelector('#resignButton');
       const finishButton = document.querySelector('#finishButton');
       const resetButton = document.querySelector('#resetButton');
-      let game = new GoGame(Number(boardSizeElement.value));
+      let game = newGameFromControls();
 
       boardSizeElement.addEventListener('change', () => {
-        game = new GoGame(Number(boardSizeElement.value));
+        rebuildHandicapOptions();
+        game = newGameFromControls();
         render();
       });
 
-      passButton.addEventListener('click', () => {
-        game.pass();
+      handicapElement.addEventListener('change', () => {
+        game = newGameFromControls();
         render();
       });
 
-      resignButton.addEventListener('click', () => {
-        game.resign();
-        render();
-      });
-
-      finishButton.addEventListener('click', () => {
-        game.finishManually();
-        render();
-      });
-
-      resetButton.addEventListener('click', () => {
-        game = new GoGame(Number(boardSizeElement.value));
-        render();
-      });
+      passButton.addEventListener('click', () => { game.pass(); render(); });
+      resignButton.addEventListener('click', () => { game.resign(); render(); });
+      finishButton.addEventListener('click', () => { game.finishManually(); render(); });
+      resetButton.addEventListener('click', () => { game = newGameFromControls(); render(); });
 
       function render() {
+        const starSet = new Set(getStarPoints(game.size).map(([row, col]) => pointKey(row, col)));
         boardElement.style.setProperty('--size', game.size);
         boardElement.replaceChildren();
 
@@ -476,17 +603,27 @@
               stoneElement.className = `stone ${stone}`;
               stoneElement.setAttribute('aria-label', stone === 'black' ? '黒石' : '白石');
               point.append(stoneElement);
+            } else if (starSet.has(pointKey(row, col))) {
+              const star = document.createElement('span');
+              star.className = 'hoshi';
+              star.setAttribute('aria-hidden', 'true');
+              point.append(star);
             }
             boardElement.append(point);
           }
         }
 
+        const score = game.estimateScore();
         const turn = game.currentPlayer === 'black' ? '黒' : '白';
-        statusText.textContent = game.finished ? game.result : `${turn}番です。`;
+        statusText.textContent = game.finished ? toJapaneseMessage(game.result) : `${turn}番です。`;
         turnLabel.textContent = game.finished ? '-' : turn;
         moveNumber.textContent = String(game.moveNumber);
         blackCaptures.textContent = String(game.captures.black);
         whiteCaptures.textContent = String(game.captures.white);
+        blackArea.textContent = formatNumber(score.black.total);
+        whiteArea.textContent = formatNumber(score.white.total);
+        neutralArea.textContent = String(score.neutral);
+        scoreLead.textContent = formatLead(score);
         messageText.textContent = toJapaneseMessage(game.lastMessage);
         passButton.disabled = game.finished;
         resignButton.disabled = game.finished;
@@ -497,6 +634,28 @@
         const result = game.play(row, col);
         if (!result.ok) game.lastMessage = reasonToMessage(result.reason);
         render();
+      }
+
+      function rebuildHandicapOptions() {
+        const size = Number(boardSizeElement.value);
+        const current = Number(handicapElement.value || 0);
+        const max = HANDICAP_POINTS[size].length;
+        handicapElement.replaceChildren();
+        for (let count = 0; count <= max; count += 1) {
+          const option = document.createElement('option');
+          option.value = String(count);
+          option.textContent = count === 0 ? 'なし' : `${count}子`;
+          handicapElement.append(option);
+        }
+        handicapElement.value = String(Math.min(current, max));
+      }
+
+      function newGameFromControls() {
+        return new GoGame(Number(boardSizeElement.value), { handicap: Number(handicapElement.value || 0) });
+      }
+
+      function getStarPoints(size) {
+        return STAR_POINTS[size].map((point) => [...point]);
       }
 
       function createBoard(size) {
@@ -523,6 +682,20 @@
         return player === 'black' ? 'Black' : 'White';
       }
 
+      function formatScoreSummary(score) {
+        if (score.leader === 'tie') return 'Tie';
+        return `${labelPlayer(score.leader)} by ${formatNumber(score.margin)}`;
+      }
+
+      function formatLead(score) {
+        if (score.leader === 'tie') return '互角';
+        return `${score.leader === 'black' ? '黒' : '白'} +${formatNumber(score.margin)}`;
+      }
+
+      function formatNumber(value) {
+        return Number.isInteger(value) ? String(value) : value.toFixed(1);
+      }
+
       function reasonToMessage(reason) {
         const messages = {
           occupied: 'その交点にはすでに石があります。',
@@ -536,17 +709,16 @@
 
       function toJapaneseMessage(message) {
         if (message === 'Black to play.') return '黒番です。交点をクリックして着手します。';
-        if (message === 'Both players passed. Count territory manually.') {
-          return '両者が連続でパスしました。地は手動で数えてください。';
+        if (message.startsWith('Handicap stones placed.')) return '置き石を配置しました。白番から開始します。';
+        if (message.startsWith('Both players passed. Final estimate:')) {
+          return `両者が連続でパスしました。終局計算: ${formatLead(game.estimateScore())}`;
         }
-        if (message === 'Game ended. Count territory manually.') {
-          return '終局しました。地は手動で数えてください。';
+        if (message.startsWith('Game ended. Final estimate:')) {
+          return `終局計算: ${formatLead(game.estimateScore())}`;
         }
         if (message === 'Black wins by resignation.') return '白が投了しました。黒の勝ちです。';
         if (message === 'White wins by resignation.') return '黒が投了しました。白の勝ちです。';
-        if (message.endsWith(' passed.')) {
-          return `${message.startsWith('Black') ? '黒' : '白'}がパスしました。`;
-        }
+        if (message.endsWith(' passed.')) return `${message.startsWith('Black') ? '黒' : '白'}がパスしました。`;
         if (message.includes(' played ')) {
           const translated = message.startsWith('Black') ? '黒' : '白';
           const point = message.split(' played ')[1].replace('.', '');
@@ -555,6 +727,7 @@
         return message;
       }
 
+      rebuildHandicapOptions();
       render();
     </script>
   </body>
