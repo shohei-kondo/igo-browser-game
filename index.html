@@ -130,8 +130,39 @@
         pointer-events: none;
       }
 
-      .point::before { width: 100%; height: 1px; }
-      .point::after { width: 1px; height: 100%; }
+      .point::before {
+        left: 0;
+        top: 50%;
+        width: 100%;
+        height: 1px;
+      }
+
+      .point::after {
+        left: 50%;
+        top: 0;
+        width: 1px;
+        height: 100%;
+      }
+
+      .point.edge-left::before {
+        left: 50%;
+        width: 50%;
+      }
+
+      .point.edge-right::before {
+        left: 0;
+        width: 50%;
+      }
+
+      .point.edge-top::after {
+        top: 50%;
+        height: 50%;
+      }
+
+      .point.edge-bottom::after {
+        top: 0;
+        height: 50%;
+      }
 
       .point:focus-visible {
         outline: 3px solid var(--accent);
@@ -593,6 +624,10 @@
             const point = document.createElement('button');
             point.type = 'button';
             point.className = 'point';
+            if (row === 0) point.classList.add('edge-top');
+            if (row === game.size - 1) point.classList.add('edge-bottom');
+            if (col === 0) point.classList.add('edge-left');
+            if (col === game.size - 1) point.classList.add('edge-right');
             point.disabled = game.finished;
             point.setAttribute('aria-label', `${row + 1}行 ${col + 1}列`);
             point.addEventListener('click', () => handlePointClick(row, col));
