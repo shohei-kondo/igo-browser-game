@@ -242,8 +242,11 @@
         cursor: pointer;
       }
 
-      .actions button:nth-child(2) { background: var(--danger); }
-      .actions button:nth-child(4) { background: var(--muted); }
+      .actions button:nth-child(3) { background: var(--danger); }
+      .actions button:nth-child(5) {
+        grid-column: 1 / -1;
+        background: var(--muted);
+      }
 
       .actions button:disabled, .point:disabled {
         cursor: not-allowed;
@@ -353,6 +356,7 @@
 
         <div class="actions">
           <button id="passButton" type="button">パス</button>
+          <button id="undoButton" type="button">一手戻る</button>
           <button id="resignButton" type="button">投了</button>
           <button id="finishButton" type="button">終局計算</button>
           <button id="resetButton" type="button">リセット</button>
@@ -401,7 +405,45 @@
           this.lastMessage = 'Black to play.';
           this.previousBoardHash = null;
           this.passCount = 0;
+          this.history = [];
           this.placeHandicapStones(handicap);
+        }
+
+        snapshot() {
+          return {
+            board: cloneBoard(this.board),
+            currentPlayer: this.currentPlayer,
+            captures: { ...this.captures },
+            moveNumber: this.moveNumber,
+            finished: this.finished,
+            result: this.result,
+            lastMessage: this.lastMessage,
+            previousBoardHash: this.previousBoardHash,
+            passCount: this.passCount,
+          };
+        }
+
+        restore(snapshot) {
+          this.board = cloneBoard(snapshot.board);
+          this.currentPlayer = snapshot.currentPlayer;
+          this.captures = { ...snapshot.captures };
+          this.moveNumber = snapshot.moveNumber;
+          this.finished = snapshot.finished;
+          this.result = snapshot.result;
+          this.lastMessage = snapshot.lastMessage;
+          this.previousBoardHash = snapshot.previousBoardHash;
+          this.passCount = snapshot.passCount;
+        }
+
+        canUndo() {
+          return this.history.length > 0;
+        }
+
+        undo() {
+          if (!this.canUndo()) return { ok: false, reason: 'no-history' };
+          this.restore(this.history.pop());
+          this.lastMessage = `Move undone. ${labelPlayer(this.currentPlayer)} to play.`;
+          return { ok: true };
         }
 
         play(row, col) {
@@ -409,6 +451,7 @@
           if (!this.isOnBoard(row, col)) return { ok: false, reason: 'off-board' };
           if (this.board[row][col] !== null) return { ok: false, reason: 'occupied' };
 
+          const snapshot = this.snapshot();
           const before = cloneBoard(this.board);
           const beforeHash = boardHash(before);
           const player = this.currentPlayer;
@@ -442,11 +485,13 @@
           this.moveNumber += 1;
           this.currentPlayer = opponent;
           this.lastMessage = `${labelPlayer(player)} played ${row + 1}-${col + 1}.`;
+          this.history.push(snapshot);
           return { ok: true, captured };
         }
 
         pass() {
           if (this.finished) return { ok: false, reason: 'finished' };
+          this.history.push(this.snapshot());
           const player = this.currentPlayer;
           this.previousBoardHash = boardHash(this.board);
           this.passCount += 1;
@@ -464,6 +509,7 @@
 
         resign() {
           if (this.finished) return { ok: false, reason: 'finished' };
+          this.history.push(this.snapshot());
           const winner = otherPlayer(this.currentPlayer);
           this.finished = true;
           this.result = `${labelPlayer(winner)} wins by resignation.`;
@@ -473,6 +519,7 @@
 
         finishManually() {
           if (this.finished) return { ok: false, reason: 'finished' };
+          this.history.push(this.snapshot());
           this.finished = true;
           this.result = `Game ended. Final estimate: ${formatScoreSummary(this.estimateScore())}.`;
           this.lastMessage = this.result;
@@ -593,6 +640,7 @@
       const scoreLead = document.querySelector('#scoreLead');
       const messageText = document.querySelector('#messageText');
       const passButton = document.querySelector('#passButton');
+      const undoButton = document.querySelector('#undoButton');
       const resignButton = document.querySelector('#resignButton');
       const finishButton = document.querySelector('#finishButton');
       const resetButton = document.querySelector('#resetButton');
@@ -610,6 +658,7 @@
       });
 
       passButton.addEventListener('click', () => { game.pass(); render(); });
+      undoButton.addEventListener('click', () => { game.undo(); render(); });
       resignButton.addEventListener('click', () => { game.resign(); render(); });
       finishButton.addEventListener('click', () => { game.finishManually(); render(); });
       resetButton.addEventListener('click', () => { game = newGameFromControls(); render(); });
@@ -661,6 +710,7 @@
         scoreLead.textContent = formatLead(score);
         messageText.textContent = toJapaneseMessage(game.lastMessage);
         passButton.disabled = game.finished;
+        undoButton.disabled = !game.canUndo();
         resignButton.disabled = game.finished;
         finishButton.disabled = game.finished;
       }
@@ -753,6 +803,9 @@
         }
         if (message === 'Black wins by resignation.') return '白が投了しました。黒の勝ちです。';
         if (message === 'White wins by resignation.') return '黒が投了しました。白の勝ちです。';
+        if (message.startsWith('Move undone.')) {
+          return `一手戻しました。${game.currentPlayer === 'black' ? '黒' : '白'}番です。`;
+        }
         if (message.endsWith(' passed.')) return `${message.startsWith('Black') ? '黒' : '白'}がパスしました。`;
         if (message.includes(' played ')) {
           const translated = message.startsWith('Black') ? '黒' : '白';

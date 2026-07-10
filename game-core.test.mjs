@@ -128,3 +128,41 @@ test('treats large open areas as neutral in rough estimates', () => {
   assert.equal(score.black.total, 2);
   assert.equal(score.neutral, 359);
 });
+
+test('undo reverts a move including captures and turn', () => {
+  const game = new GoGame(9);
+  game.play(1, 0); // B
+  game.play(1, 1); // W target
+  game.play(0, 1); // B
+  game.play(5, 5); // W
+  game.play(2, 1); // B
+  game.play(6, 6); // W
+  game.play(1, 2); // B captures W at 1,1
+  assert.equal(game.captures.black, 1);
+  assert.equal(game.undo().ok, true);
+  assert.equal(game.board[1][2], null);
+  assert.equal(game.board[1][1], 'white');
+  assert.equal(game.captures.black, 0);
+  assert.equal(game.currentPlayer, 'black');
+  assert.equal(game.moveNumber, 6);
+});
+
+test('undo reverts a pass and a finished game', () => {
+  const game = new GoGame(9);
+  game.play(4, 4);
+  game.pass(); // W pass
+  game.pass(); // B pass -> finished
+  assert.equal(game.finished, true);
+  assert.equal(game.undo().ok, true);
+  assert.equal(game.finished, false);
+  assert.equal(game.currentPlayer, 'black');
+  assert.equal(game.passCount, 1);
+});
+
+test('undo with no history is rejected', () => {
+  const game = new GoGame(9);
+  const result = game.undo();
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'no-history');
+  assert.equal(game.canUndo(), false);
+});

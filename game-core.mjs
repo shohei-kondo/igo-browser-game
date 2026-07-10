@@ -36,7 +36,45 @@ export class GoGame {
     this.lastMessage = 'Black to play.';
     this.previousBoardHash = null;
     this.passCount = 0;
+    this.history = [];
     this.placeHandicapStones(handicap);
+  }
+
+  snapshot() {
+    return {
+      board: cloneBoard(this.board),
+      currentPlayer: this.currentPlayer,
+      captures: { ...this.captures },
+      moveNumber: this.moveNumber,
+      finished: this.finished,
+      result: this.result,
+      lastMessage: this.lastMessage,
+      previousBoardHash: this.previousBoardHash,
+      passCount: this.passCount,
+    };
+  }
+
+  restore(snapshot) {
+    this.board = cloneBoard(snapshot.board);
+    this.currentPlayer = snapshot.currentPlayer;
+    this.captures = { ...snapshot.captures };
+    this.moveNumber = snapshot.moveNumber;
+    this.finished = snapshot.finished;
+    this.result = snapshot.result;
+    this.lastMessage = snapshot.lastMessage;
+    this.previousBoardHash = snapshot.previousBoardHash;
+    this.passCount = snapshot.passCount;
+  }
+
+  canUndo() {
+    return this.history.length > 0;
+  }
+
+  undo() {
+    if (!this.canUndo()) return { ok: false, reason: 'no-history' };
+    this.restore(this.history.pop());
+    this.lastMessage = `Move undone. ${labelPlayer(this.currentPlayer)} to play.`;
+    return { ok: true };
   }
 
   play(row, col) {
@@ -44,6 +82,7 @@ export class GoGame {
     if (!this.isOnBoard(row, col)) return { ok: false, reason: 'off-board' };
     if (this.board[row][col] !== null) return { ok: false, reason: 'occupied' };
 
+    const snapshot = this.snapshot();
     const before = cloneBoard(this.board);
     const beforeHash = boardHash(before);
     const player = this.currentPlayer;
@@ -79,11 +118,13 @@ export class GoGame {
     this.moveNumber += 1;
     this.currentPlayer = opponent;
     this.lastMessage = `${labelPlayer(player)} played ${formatPoint(row, col)}.`;
+    this.history.push(snapshot);
     return { ok: true, captured };
   }
 
   pass() {
     if (this.finished) return { ok: false, reason: 'finished' };
+    this.history.push(this.snapshot());
     const player = this.currentPlayer;
     this.previousBoardHash = boardHash(this.board);
     this.passCount += 1;
@@ -101,6 +142,7 @@ export class GoGame {
 
   resign() {
     if (this.finished) return { ok: false, reason: 'finished' };
+    this.history.push(this.snapshot());
     const loser = this.currentPlayer;
     const winner = otherPlayer(loser);
     this.finished = true;
@@ -111,6 +153,7 @@ export class GoGame {
 
   finishManually() {
     if (this.finished) return { ok: false, reason: 'finished' };
+    this.history.push(this.snapshot());
     this.finished = true;
     this.result = `Game ended. Final estimate: ${formatScoreSummary(this.estimateScore())}.`;
     this.lastMessage = this.result;
