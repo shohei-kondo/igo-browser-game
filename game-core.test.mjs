@@ -166,3 +166,40 @@ test('undo with no history is rejected', () => {
   assert.equal(result.reason, 'no-history');
   assert.equal(game.canUndo(), false);
 });
+
+test('play reports atari when an opponent group drops to one liberty', () => {
+  const game = new GoGame(9);
+  game.play(1, 2); // B
+  game.play(2, 2); // W target
+  game.play(2, 1); // B
+  game.play(5, 5); // W elsewhere
+  const result = game.play(3, 2); // B leaves W(2,2) with one liberty
+  assert.equal(result.ok, true);
+  assert.equal(result.atari, true);
+});
+
+test('play does not report atari for safe moves', () => {
+  const game = new GoGame(9);
+  const first = game.play(4, 4); // B, no opponent stones
+  assert.equal(first.atari, false);
+  const second = game.play(0, 0); // W far away, B group has 4 liberties
+  assert.equal(second.atari, false);
+});
+
+test('estimateScore lists territory points per owner', () => {
+  const game = new GoGame(9);
+  // Black walls off the top-left corner (2 points), white the bottom-right (2 points).
+  game.board[0][2] = 'black';
+  game.board[1][0] = 'black';
+  game.board[1][1] = 'black';
+  game.board[1][2] = 'black';
+  game.board[8][6] = 'white';
+  game.board[7][6] = 'white';
+  game.board[7][7] = 'white';
+  game.board[7][8] = 'white';
+  const score = game.estimateScore();
+  assert.deepEqual(score.black.points.sort(), ['0,0', '0,1']);
+  assert.deepEqual(score.white.points.sort(), ['8,7', '8,8']);
+  assert.equal(score.black.territory, 2);
+  assert.equal(score.white.territory, 2);
+});

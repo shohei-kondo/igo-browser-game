@@ -196,6 +196,51 @@
         border: 1px solid rgba(0, 0, 0, 0.18);
       }
 
+      .territory {
+        position: relative;
+        z-index: 1;
+        width: 42%;
+        aspect-ratio: 1;
+        border-radius: 3px;
+        pointer-events: none;
+      }
+
+      .territory.black {
+        background: rgba(8, 8, 8, 0.72);
+      }
+
+      .territory.white {
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid rgba(0, 0, 0, 0.25);
+      }
+
+      .atari-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        place-items: center;
+        opacity: 0;
+        transition: opacity 0.25s ease;
+        pointer-events: none;
+      }
+
+      .atari-overlay.show {
+        opacity: 1;
+      }
+
+      .atari-overlay span {
+        padding: 18px 46px;
+        border: 3px solid var(--danger);
+        border-radius: 14px;
+        background: rgba(255, 250, 240, 0.92);
+        box-shadow: 0 12px 30px rgba(56, 43, 25, 0.3);
+        color: var(--danger);
+        font-size: clamp(40px, 9vmin, 72px);
+        font-weight: 700;
+        letter-spacing: 0.2em;
+      }
+
       .side-panel {
         display: flex;
         flex-direction: column;
@@ -369,6 +414,10 @@
       </aside>
     </main>
 
+    <div id="atariOverlay" class="atari-overlay" aria-hidden="true">
+      <span>あたり!</span>
+    </div>
+
     <script>
       const PLAYERS = ['black', 'white'];
       const STAR_POINTS = {
@@ -479,6 +528,15 @@
             return { ok: false, reason: 'ko' };
           }
 
+          let atari = false;
+          for (const [nextRow, nextCol] of this.neighbors(row, col)) {
+            if (this.board[nextRow][nextCol] !== opponent) continue;
+            if (this.collectGroup(nextRow, nextCol).liberties.size === 1) {
+              atari = true;
+              break;
+            }
+          }
+
           this.captures[player] += captured;
           this.previousBoardHash = beforeHash;
           this.passCount = 0;
@@ -486,7 +544,7 @@
           this.currentPlayer = opponent;
           this.lastMessage = `${labelPlayer(player)} played ${row + 1}-${col + 1}.`;
           this.history.push(snapshot);
-          return { ok: true, captured };
+          return { ok: true, captured, atari };
         }
 
         pass() {
@@ -528,8 +586,8 @@
 
         estimateScore() {
           const score = {
-            black: { stones: 0, territory: 0, total: 0 },
-            white: { stones: 0, territory: 0, total: 0 },
+            black: { stones: 0, territory: 0, total: 0, points: [] },
+            white: { stones: 0, territory: 0, total: 0, points: [] },
             neutral: 0,
             komi: this.komi,
             leader: null,
@@ -549,7 +607,9 @@
               const region = this.collectEmptyRegion(row, col);
               for (const regionKey of region.points) visited.add(regionKey);
               if (region.borders.size === 1 && (!region.touchesEdge || region.points.length <= 4)) {
-                score[[...region.borders][0]].territory += region.points.length;
+                const owner = [...region.borders][0];
+                score[owner].territory += region.points.length;
+                score[owner].points.push(...region.points);
               }
               else score.neutral += region.points.length;
             }
@@ -644,6 +704,7 @@
       const resignButton = document.querySelector('#resignButton');
       const finishButton = document.querySelector('#finishButton');
       const resetButton = document.querySelector('#resetButton');
+      const atariOverlay = document.querySelector('#atariOverlay');
       let game = newGameFromControls();
 
       boardSizeElement.addEventListener('change', () => {
@@ -665,6 +726,10 @@
 
       function render() {
         const starSet = new Set(getStarPoints(game.size).map(([row, col]) => pointKey(row, col)));
+        const score = game.estimateScore();
+        const showTerritory = game.finished && game.result.includes('Final estimate');
+        const territoryBlack = showTerritory ? new Set(score.black.points) : new Set();
+        const territoryWhite = showTerritory ? new Set(score.white.points) : new Set();
         boardElement.style.setProperty('--size', game.size);
         boardElement.replaceChildren();
 
@@ -687,6 +752,12 @@
               stoneElement.className = `stone ${stone}`;
               stoneElement.setAttribute('aria-label', stone === 'black' ? '黒石' : '白石');
               point.append(stoneElement);
+            } else if (territoryBlack.has(pointKey(row, col)) || territoryWhite.has(pointKey(row, col))) {
+              const owner = territoryBlack.has(pointKey(row, col)) ? 'black' : 'white';
+              const territoryElement = document.createElement('span');
+              territoryElement.className = `territory ${owner}`;
+              territoryElement.setAttribute('aria-label', owner === 'black' ? '黒地' : '白地');
+              point.append(territoryElement);
             } else if (starSet.has(pointKey(row, col))) {
               const star = document.createElement('span');
               star.className = 'hoshi';
@@ -697,7 +768,6 @@
           }
         }
 
-        const score = game.estimateScore();
         const turn = game.currentPlayer === 'black' ? '黒' : '白';
         statusText.textContent = game.finished ? toJapaneseMessage(game.result) : `${turn}番です。`;
         turnLabel.textContent = game.finished ? '-' : turn;
@@ -719,6 +789,14 @@
         const result = game.play(row, col);
         if (!result.ok) game.lastMessage = reasonToMessage(result.reason);
         render();
+        if (result.ok && result.atari) showAtari();
+      }
+
+      let atariTimer = null;
+      function showAtari() {
+        atariOverlay.classList.add('show');
+        clearTimeout(atariTimer);
+        atariTimer = setTimeout(() => atariOverlay.classList.remove('show'), 2000);
       }
 
       function rebuildHandicapOptions() {

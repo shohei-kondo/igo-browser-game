@@ -112,6 +112,15 @@ export class GoGame {
       return { ok: false, reason: 'ko' };
     }
 
+    let atari = false;
+    for (const [nextRow, nextCol] of this.neighbors(row, col)) {
+      if (this.board[nextRow][nextCol] !== opponent) continue;
+      if (this.collectGroup(nextRow, nextCol).liberties.size === 1) {
+        atari = true;
+        break;
+      }
+    }
+
     this.captures[player] += captured;
     this.previousBoardHash = beforeHash;
     this.passCount = 0;
@@ -119,7 +128,7 @@ export class GoGame {
     this.currentPlayer = opponent;
     this.lastMessage = `${labelPlayer(player)} played ${formatPoint(row, col)}.`;
     this.history.push(snapshot);
-    return { ok: true, captured };
+    return { ok: true, captured, atari };
   }
 
   pass() {
@@ -162,8 +171,8 @@ export class GoGame {
 
   estimateScore() {
     const score = {
-      black: { stones: 0, territory: 0, total: 0 },
-      white: { stones: 0, territory: 0, total: 0 },
+      black: { stones: 0, territory: 0, total: 0, points: [] },
+      white: { stones: 0, territory: 0, total: 0, points: [] },
       neutral: 0,
       komi: this.komi,
       leader: null,
@@ -187,6 +196,7 @@ export class GoGame {
         if (region.borders.size === 1 && (!region.touchesEdge || region.points.length <= 4)) {
           const owner = [...region.borders][0];
           score[owner].territory += region.points.length;
+          score[owner].points.push(...region.points);
         } else {
           score.neutral += region.points.length;
         }
