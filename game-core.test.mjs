@@ -203,3 +203,36 @@ test('estimateScore lists territory points per owner', () => {
   assert.equal(score.black.territory, 2);
   assert.equal(score.white.territory, 2);
 });
+
+test('final scoring counts large edge-touching territories', () => {
+  const game = new GoGame(9);
+  for (let row = 0; row < 9; row += 1) {
+    game.board[row][3] = 'black';
+    game.board[row][5] = 'white';
+  }
+  // During play the rough estimate treats these regions as neutral.
+  const rough = game.estimateScore();
+  assert.equal(rough.black.territory, 0);
+  assert.equal(rough.neutral, 63);
+  // At game end every single-color region counts as territory.
+  const final = game.estimateScore({ final: true });
+  assert.equal(final.black.territory, 27);
+  assert.equal(final.white.territory, 27);
+  assert.equal(final.neutral, 9);
+  assert.equal(final.black.points.length, 27);
+  assert.equal(final.white.points.length, 27);
+});
+
+test('finished game defaults to final scoring', () => {
+  const game = new GoGame(9);
+  for (let row = 0; row < 9; row += 1) {
+    game.board[row][3] = 'black';
+    game.board[row][5] = 'white';
+  }
+  game.pass();
+  game.pass();
+  assert.equal(game.finished, true);
+  const score = game.estimateScore();
+  assert.equal(score.black.territory, 27);
+  assert.equal(score.white.territory, 27);
+});

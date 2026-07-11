@@ -293,9 +293,13 @@
         background: var(--muted);
       }
 
-      .actions button:disabled, .point:disabled {
+      .actions button:disabled {
         cursor: not-allowed;
         opacity: 0.55;
+      }
+
+      .point:disabled {
+        cursor: not-allowed;
       }
 
       .message-box {
@@ -397,7 +401,7 @@
             <strong id="scoreLead">白 +6.5</strong>
           </div>
         </div>
-        <p class="note">試算は中国式エリア計算です。盤上の石と単色で囲まれた空点を数えます。死石指定はありません。</p>
+        <p class="note">試算は中国式エリア計算です。対局中は単色で囲まれた小さな空点のみ数えるザックリ試算、終局時は単色で囲まれた空点をすべて陣地として数えて色塗りします。死石指定はありません。</p>
 
         <div class="actions">
           <button id="passButton" type="button">パス</button>
@@ -584,7 +588,8 @@
           return { ok: true };
         }
 
-        estimateScore() {
+        estimateScore(options = {}) {
+          const final = options.final ?? this.finished;
           const score = {
             black: { stones: 0, territory: 0, total: 0, points: [] },
             white: { stones: 0, territory: 0, total: 0, points: [] },
@@ -606,7 +611,7 @@
               if (visited.has(key)) continue;
               const region = this.collectEmptyRegion(row, col);
               for (const regionKey of region.points) visited.add(regionKey);
-              if (region.borders.size === 1 && (!region.touchesEdge || region.points.length <= 4)) {
+              if (region.borders.size === 1 && (final || !region.touchesEdge || region.points.length <= 4)) {
                 const owner = [...region.borders][0];
                 score[owner].territory += region.points.length;
                 score[owner].points.push(...region.points);

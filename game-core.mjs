@@ -169,7 +169,8 @@ export class GoGame {
     return { ok: true };
   }
 
-  estimateScore() {
+  estimateScore(options = {}) {
+    const final = options.final ?? this.finished;
     const score = {
       black: { stones: 0, territory: 0, total: 0, points: [] },
       white: { stones: 0, territory: 0, total: 0, points: [] },
@@ -193,7 +194,7 @@ export class GoGame {
         const region = this.collectEmptyRegion(row, col);
         for (const regionKey of region.points) visited.add(regionKey);
 
-        if (region.borders.size === 1 && (!region.touchesEdge || region.points.length <= 4)) {
+        if (region.borders.size === 1 && (final || !region.touchesEdge || region.points.length <= 4)) {
           const owner = [...region.borders][0];
           score[owner].territory += region.points.length;
           score[owner].points.push(...region.points);
